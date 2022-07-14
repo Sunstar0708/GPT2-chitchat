@@ -91,7 +91,7 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
         # Remove all tokens with a probability less than the last token of the top-k
         # torch.topk()返回最后一维最大的top_k个元素，返回值为二维(values,indices)
         # ...表示其他维度由计算机自行推断
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1]   # 找到第k大的值
         logits[indices_to_remove] = filter_value  # 对于topk之外的其他元素的logits值设为负无穷
 
     if top_p > 0.0:
@@ -129,7 +129,7 @@ def main():
         samples_file.write("聊天记录{}:\n".format(datetime.now()))
     # 存储聊天记录，每个utterance以token的id的形式进行存储
     history = []
-    print('开始和chatbot聊天，输入CTRL + Z以退出')
+    print('开始和chatbot聊天, 输入CTRL + Z以退出')
 
     while True:
         try:
@@ -150,7 +150,7 @@ def main():
             # 最多生成max_len个token
             for _ in range(args.max_len):
                 outputs = model(input_ids=input_ids)
-                logits = outputs.logits
+                logits = outputs.logits     # (batch_size, sequence_length, config.vocab_size)
                 next_token_logits = logits[0, -1, :]
                 # 对于已生成的结果generated中的每个token添加一个重复惩罚项，降低其生成概率
                 for id in set(response):

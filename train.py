@@ -24,11 +24,12 @@ import pandas as pd
 import torch.nn.utils.rnn as rnn_utils
 import numpy as np
 from dataset import MyDataset
+from accelerate import Accelerator
 
 
 def set_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--device', default='3', type=str, required=False, help='设置使用哪些显卡')
+    parser.add_argument('--device', default='0,1,2,3', type=str, required=False, help='设置使用哪些显卡')
     parser.add_argument('--no_cuda', action='store_true', help='不使用GPU进行训练')
     parser.add_argument('--vocab_path', default='vocab/vocab.txt', type=str, required=False,
                         help='词表路径')
@@ -59,6 +60,7 @@ def set_args():
     parser.add_argument('--warmup_steps', type=int, default=4000, help='warm up步数')
     # parser.add_argument('--label_smoothing', default=True, action='store_true', help='是否进行标签平滑')
     parser.add_argument('--val_num', type=int, default=8000, help='验证集大小')
+    parser.add_argument('--fp16_training', type=str, default=False, help='是否使用混合精度训练')
     args = parser.parse_args()
     return args
 
@@ -91,7 +93,7 @@ def create_logger(args):
 
 def collate_fn(batch):
     input_ids = rnn_utils.pad_sequence(batch, batch_first=True, padding_value=0)
-    labels = rnn_utils.pad_sequence(batch, batch_first=True, padding_value=-100)
+    labels = rnn_utils.pad_sequence(batch, batch_first=True, padding_value=-100)        # 也是input_ids一样的值
     return input_ids, labels
 
 
@@ -126,7 +128,7 @@ def load_dataset(logger, args):
         input_list = pickle.load(f)
 
     # 划分训练集与验证集
-    val_num = args.val_num
+    val_num = args.val_num      # 默认8000
     input_list_train = input_list[val_num:]
     input_list_val = input_list[:val_num]
     # test
@@ -140,14 +142,13 @@ def load_dataset(logger, args):
 
 
 def train_epoch(model, train_dataloader, optimizer, scheduler, logger,
-                epoch, args):
+                epoch, args, device):
     model.train()
-    device = args.device
     # pad_id = args.pad_id
     # sep_id = args.sep_id
     ignore_index = args.ignore_index
     epoch_start_time = datetime.now()
-    total_loss = 0  # 记录下整个epoch的loss的总和
+    total_loss = 0  # 记录下整个epoch的每个batch的loss的总和
 
     # epoch_correct_num:每个epoch中,output预测正确的word的数量
     # epoch_total_num: 每个epoch中,output预测的word的总数量
@@ -156,10 +157,10 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, logger,
     for batch_idx, (input_ids, labels) in enumerate(train_dataloader):
         # 捕获cuda out of memory exception
         try:
-            input_ids = input_ids.to(device)
-            labels = labels.to(device)
+            input_ids = input_ids.to(device)        # (batch_size, sequence_length)
+            labels = labels.to(device)              # (batch_size, sequence_length)
             outputs = model.forward(input_ids, labels=labels)
-            logits = outputs.logits
+            logits = outputs.logits     # (batch_size, sequence_length, config.vocab_size)
             loss = outputs.loss
             loss = loss.mean()
 
@@ -173,9 +174,9 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, logger,
 
             total_loss += loss.item()
             if args.gradient_accumulation_steps > 1:
-                loss = loss / args.gradient_accumulation_steps
+                loss = loss / args.gradient_accumulation_steps      # 对loss进行平均
 
-            loss.backward()
+            loss.backward()     # 计算梯度
             # 梯度裁剪
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
@@ -224,10 +225,9 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, logger,
     return epoch_mean_loss
 
 
-def validate_epoch(model, validate_dataloader, logger, epoch, args):
+def validate_epoch(model, validate_dataloader, logger, epoch, args, device):
     logger.info("start validating")
     model.eval()
-    device = args.device
     # pad_id = args.pad_id
     # sep_id = args.sep_id
     ignore_index = args.ignore_index
@@ -264,7 +264,7 @@ def validate_epoch(model, validate_dataloader, logger, epoch, args):
             raise exception
 
 
-def train(model, logger, train_dataset, validate_dataset, args):
+def train(model, logger, train_dataset, validate_dataset, args, device):
     train_dataloader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=collate_fn,
         drop_last=True
@@ -272,13 +272,16 @@ def train(model, logger, train_dataset, validate_dataset, args):
     validate_dataloader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=True,
                                      num_workers=args.num_workers, collate_fn=collate_fn, drop_last=True)
     early_stopping = EarlyStopping(args.patience, verbose=True, save_path=args.save_model_path)
-    t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.epochs
+    t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.epochs       # 总共更新多少次梯度
     optimizer = transformers.AdamW(model.parameters(), lr=args.lr, eps=args.eps)
     # scheduler = transformers.WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     scheduler = transformers.get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
-
+    # if eval(args.fp16_training):
+    #     accelerator = Accelerator(fp16=True)
+    #     device = accelerator.device
+    #     model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader) 
     logger.info('starting training')
 
     # 用于记录每个epoch训练和验证的loss
@@ -291,13 +294,13 @@ def train(model, logger, train_dataset, validate_dataset, args):
         train_loss = train_epoch(
             model=model, train_dataloader=train_dataloader,
             optimizer=optimizer, scheduler=scheduler,
-            logger=logger, epoch=epoch, args=args)
+            logger=logger, epoch=epoch, args=args, device = device)
         train_losses.append(train_loss)
 
         # ========== validate ========== #
         validate_loss = validate_epoch(
             model=model, validate_dataloader=validate_dataloader,
-            logger=logger, epoch=epoch, args=args)
+            logger=logger, epoch=epoch, args=args, device = device)
         validate_losses.append(validate_loss)
 
         # 保存当前困惑度最低的模型，困惑度低，模型的生成效果不一定会越好
@@ -346,8 +349,8 @@ def caculate_loss(logit, target, pad_idx, smoothing=True):
 
 
 def calculate_acc(logit, labels, ignore_index=-100):
-    logit = logit[..., :-1, :].contiguous().view(-1, logit.size(-1))
-    labels = labels[..., 1:].contiguous().view(-1)
+    logit = logit[..., :-1, :].contiguous().view(-1, logit.size(-1))    # 0~max_length为模型预测的下一个字
+    labels = labels[..., 1:].contiguous().view(-1)      # 1~max_length为所需预测的下一个字
 
     _, logit = logit.max(dim=-1)  # 对于每条数据，返回最大的index
     # 进行非运算，返回一个tensor，若labels的第i个位置为pad_id，则置为0，否则为1
@@ -362,9 +365,7 @@ def main():
     args = set_args()
 
     # 设置使用哪些显卡进行训练
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-
-    args.cuda = not args.no_cuda
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
     if args.batch_size < 2048 and args.warmup_steps <= 4000:
         print('[Warning] The warmup steps may be not enough.\n' \
@@ -376,8 +377,7 @@ def main():
     logger = create_logger(args)
     # 当用户使用GPU,并且GPU可用时
     args.cuda = torch.cuda.is_available() and not args.no_cuda
-    device = 'cuda:0' if args.cuda else 'cpu'
-    args.device = device
+    device = 'cuda:2' if args.cuda else 'cpu'
     logger.info('using device:{}'.format(device))
 
     # 初始化tokenizer
@@ -402,10 +402,10 @@ def main():
 
     # 并行训练模型
     if args.cuda and torch.cuda.device_count() > 1:
-        model = DataParallel(model).cuda()
+        model = DataParallel(model, device_ids= [int(i) for i in args.device.split(',')])
+        multi_gpu = True
         # model = BalancedDataParallel(args.gpu0_bsz, model, dim=0).cuda()
         logger.info("use GPU {} to train".format(args.device))
-
     # 计算模型参数数量
     num_parameters = 0
     parameters = model.parameters()
@@ -420,7 +420,7 @@ def main():
     # ========= Loading Dataset ========= #
     train_dataset, validate_dataset = load_dataset(logger, args)
 
-    train(model, logger, train_dataset, validate_dataset, args)
+    train(model, logger, train_dataset, validate_dataset, args, device)
 
 
 if __name__ == '__main__':

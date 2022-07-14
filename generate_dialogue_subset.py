@@ -61,7 +61,9 @@ def compute_dialogue_length():
     # plt.plot(dialogue_length_arr, num_arr, c='green')
     plt.scatter(dialogue_length_arr, num_arr)
     plt.show()
+    plt.savefig("./1")
 
 
 if __name__ == '__main__':
-    generate_subset()
+    compute_dialogue_length()
+    # generate_subset()
