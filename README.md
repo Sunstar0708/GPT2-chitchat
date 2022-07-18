@@ -1,43 +1,9 @@
-# GPT2 for Chinese chitchat
-
-## UPDATE 2021.06.16
-发布了[基于CPM模型的中文文本生成项目](https://github.com/yangjianxin1/CPM) ，可用于作文、小说、新闻、古诗等中文生成任务，并且训练和分享了中文作文生成模型，取得了不错的生成效果。
-该项目提供了数据预处理、模型训练、文本生成、Http服务等代码模块。生成效果如下：
-```
-title:家乡的四季
-context:家乡的四季,最美不过了
-
-result:
-家乡的四季,最美不过了。家乡的四季,是令人沉醉的。
-春天,万物复苏,冰雪融化,万物复苏。树枝抽出了嫩芽,花朵绽放了笑脸,树木吐出了嫩芽,春笋也破土而出,像是迎接春天的到来。小鸟们也在枝头唱起了动听的歌曲,周围的一切都变成了春的样子。
-夏天,荷塘里的荷花开了,散发出阵阵清香。远处,山的颜色深浅不一,像是穿着一件翠绿的长裙,在荷塘的衬托下显得更加美,更加翠绿。微风拂过,荷花轻轻地摆动着,像是在和我打招呼呢!
-秋天,
-
-result:
-家乡的四季,最美不过了。
-春天,嫩芽破土而出,焕发出生机。每当春姑娘来临之际,小草就会脱下旧衣服,冲出家门,迫不及待地站在土地上,感受春风亲吻着自己的脸庞,贪婪地吸吮着甘甜的露水。春姑娘来到田野里,到处都是一片嫩绿,一派盎然的景象。柳树姑娘刚刚梳理好头发,甩动着长长的头发,伴随着阵阵春风,跳起了欢快的舞蹈。此时此刻,春雨也来凑热闹了,她滴落在溪水中,随着春风舞动起来,漾起一圈圈水纹。在河边,长满了一串串一串串鲜艳的鲜花,
-```
-
-
-
-## UPDATE 2021.05.26
-- 调整项目结构，优化代码，修改部分bug。简化生成方法，加快生成速度，删除了MMI的做法
-- 新增50w、100w的多轮对话的原始数据与预处理数据
-
-## UPDATE 2020.01.09
-添加50w闲聊语料与预训练模型的GoogleDrive的下载地址
-
-## UPDATE 2019.12.17
-~~基于微软的论文[DialoGPT:Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.xilesou.top/pdf/1911.00536.pdf)添加了MMI Model(maximum mutual information scoring function),对dialogue model生成的多个response进行筛选~~
-
+# GPT2 for Chinese chatbot
 
 ## 项目描述
 - 本项目是基于GPT2的中文闲聊机器人，模型实现基于HuggingFace的[transformers](https://github.com/huggingface/transformers)。
 - 本项目受 [GPT2-Chinese](https://github.com/Morizeyao/GPT2-Chinese)启发，精读作者的代码，获益匪浅。
 - 在生成阶段，使用了Temperature、Top-k Sampling和Nucleus Sampling等，可参考论文[The Curious Case of Neural Text Degeneration](https://arxiv.xilesou.top/pdf/1904.09751.pdf)
-- ~~根据微软的DialoGPT的思想，在项目中添加了互信息。训练了两个模型:Dialogue Model与MMI Model(maximum mutual information scoring function)。首先使用Dialogue Model生成多个候选response，然后使用MMI Model从候选response中，选取loss最小的作为最终的response~~
-- 代码中给出了许多详细的中文注释，方便大家更好地理解代码(部分代码或注释可能有误，望大家不吝赐教)
-- **本项目被[微软的DialoGPT项目](https://github.com/microsoft/DialoGPT)引用**（为了简化生成方法，加快生成速度，删除了MMI的生成方法）
 
 ## 运行环境
 python3.6、 transformers==4.2.0、pytorch==1.7.0
@@ -101,14 +67,8 @@ python interact.py --model_path model_epoch40_50w --device 0 (指定0号GPU进�
 突然很想你
 我也很想你
 
-想看你的美照
-亲我一口就给你看
-我亲两口
-讨厌人家拿小拳拳捶你胸口
-
-美女约嘛
-开好房等你了
-我来啦
+你在干嘛
+我在看电视
 ```
 运行preprocess.py，对data/train.txt对话语料进行tokenize，然后进行序列化保存到data/train.pkl。train.pkl中序列化的对象的类型为List[List],记录对话列表中,每个对话包含的token。
 ```
@@ -171,132 +131,54 @@ python interact.py --no_cuda --model_path path_to_your_model --max_history_len 3
 ## 生成样例
 #### Sample 1:
 ``` 
-  user :你好啊
-chatbot:你好，请问您是？
-  user :我是你的主人啊 
-chatbot:你是狗吗？
-  user :你才是狗
-chatbot:你不是狗我是你的小主人
-  user :你这个大笨蛋
-chatbot:你大笨蛋，你是想挨打了
-  user :你全家都是大笨蛋
-chatbot:我是你爸爸
-  user :算了，不跟你吵了，你在干嘛呢
-chatbot:我在上班啊，你还没下班呢啊你
-  user :我周末要做作业啊
-chatbot:不是才交了吗，早晚做完啊
-  user :好多作业啊，还没做完呢
-chatbot:我在抄，我妈让我周五交，还有事
-  user :你就不怕被你妈妈骂吗
-chatbot:不怕
-  user :你周末有去哪里玩吗
-chatbot:没时间啊，忙得很啊
-  user :忙着干嘛呢
-chatbot:不知道啊，我周末没有作业，我想睡觉，然后还得找人
+user:你好
+chatbot:你好
+user:你在上海吗
+chatbot:没有，我在深圳呢
+user:深圳好玩吗
+chatbot:不好玩，就是吃吃吃
+user:吃吃吃还不好
+chatbot:对了你知道我在哪里吗？
+user:你不是在深圳嘛
+chatbot:对啊你不在
+user:你在干嘛呢
+chatbot:你猜
+user:你在学习嘛
+chatbot:在学习
+user:那你好好加油
+chatbot:好的
+user:学习有趣嘛
+chatbot:没有
+user:好吧
+chatbot:还是你比较有趣
 ``` 
 
 #### Sample 2:
 ``` 
-  user :你好啊
-chatbot:你好我好大家好
-  user :你在干嘛呢
-chatbot:你不上课啊
-  user :今天是周末啊，笨蛋
-chatbot:我在学校呢
-  user :我也是，周末还要做作业
-chatbot:我还没写呢我们都还没写
-  user :周末你有去哪里玩吗
-chatbot:没有去南京
-  user :南京有什么好玩的啊
-chatbot:我们没去南京
-  user :你刚刚又说你去了南京，你是不是耍我啊
-chatbot:我刚刚才到南京
-  user :你好笨啊
-chatbot:我没有
-  user :你是大笨蛋
-chatbot:你才是大笨蛋
-  user :你全家都是大笨蛋
-chatbot:你个傻冒
-  user :你个智障
-chatbot:哈哈哈
-``` 
-#### Sample 3:
-``` 
-  user :在干嘛
-chatbot:睡觉
-  user :这么早就睡觉啦
-chatbot:嗯啊你也早点睡啊
-  user :我再玩一会儿手机
-chatbot:早点休息晚安
-  user :拜拜啦
-chatbot:晚安晚安
-  user :多喝热水
-chatbot:哈哈哈
-  user :多喝热水
-chatbot:好的咯
-``` 
-#### Sample 4:
-``` 
-  user :在吗
-chatbot:在
-  user :我不开心
-chatbot:怎么啦
-  user :最近好累啊
-chatbot:是挺累的
-  user :作业好多啊
-chatbot:还好还好
-  user :我觉得我快要挂科了
-chatbot:我也是啊，但是我觉得我快熬出头了
-  user :不说了，我还有好多作业没写
-chatbot:我也是啊好多啊
-  user :那先这样，下次再聊，再见了
-chatbot:好哒
+user:在吗
+chatbot:在的。
+user:我不开心
+chatbot:你怎么了？
+user:作业太多啦
+chatbot:不要紧啦，有事就好
+user:我觉得我要挂科了
+chatbot:哈哈哈，我也是这么安慰自己的
+user:怎么安慰
+chatbot:就是感觉自己好像挂了一个假号，然后我就不知道怎么安
+user:不说了，我还有好多作业没写
+chatbot:没事儿，有我呢，我帮你写
+user:那太好了
+chatbot:哈哈哈哈
+user:那先这样，下次再聊
+chatbot:好的
 ``` 
 
-#### Sample 5:
-``` 
-  user :你去过广州吗
-chatbot:去过呀，但是没有找到工作呢
-  user :那你去过北京吗
-chatbot:没有啊
-  user :北京有什么好玩的
-chatbot:没有你想象的那么好
-  user :是吗，我还没过北京
-chatbot:那里我也不怎么熟，我去过北京
-  user :北京天安门呢
-chatbot:没去过，不过可以去玩玩
-``` 
-
-#### Sample 6:
-``` 
-  user :你好
-chatbot:你好
-  user :在干嘛呢
-chatbot:在想你呢
-  user :好害羞啊
-chatbot:害羞什么啊
-  user :你这样夸我，我觉得不好意思呀
-chatbot:我夸你你还不好意思呢
-  user :是啊，哈哈哈
-chatbot:你是不是在考验我
-  user :你怎么会这样想呢
-chatbot:我说我在夸你，这么客气，
-  user :你有睡午觉吗
-chatbot:有啊
-  user :我现在有点困呢
-chatbot:我也是
-  user :等下还要去上课，好烦啊
-chatbot:我们不用上课的呀
-```
-
-## TODO
-- 多卡并行训练负载不均衡的问题
 
 ## Reference
 - [The Curious Case of Neural Text Degeneration](https://arxiv.xilesou.top/pdf/1904.09751.pdf)
 - [transformers](https://github.com/huggingface/transformers)
-- [GPT2-Chinese](https://github.com/Morizeyao/GPT2-Chinese)
-- [DialoGPT:Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.xilesou.top/pdf/1911.00536.pdf)
+- [GPT2-Chichat](https://github.com/yangjianxin1/GPT2-chitchat)
+- 
 
 
 
