@@ -178,8 +178,5 @@ chatbot:好的
 - [The Curious Case of Neural Text Degeneration](https://arxiv.xilesou.top/pdf/1904.09751.pdf)
 - [transformers](https://github.com/huggingface/transformers)
 - [GPT2-Chichat](https://github.com/yangjianxin1/GPT2-chitchat)
-- 
-
-
 
 
